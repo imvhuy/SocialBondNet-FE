@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
+import { authService } from "../../services/authService";
 import "./Login.css";
 
 const Login = () => {
@@ -13,30 +14,52 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState("");
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
 
-    // Simulate API call
-    setTimeout(() => {
-      const userData = {
-        id: 1,
-        name: "Người dùng",
+    try {
+      const response = await authService.signIn({
         email: formData.email,
+        password: formData.password
+      });
+
+      // Decode JWT to get user ID (simple decode, not verification)
+      let userId = null;
+      try {
+        const tokenPayload = JSON.parse(atob(response.accessToken.split('.')[1]));
+        userId = tokenPayload.userId;
+      } catch (e) {
+        console.warn('Could not decode token for user ID:', e);
+      }
+
+      // Create user data from response
+      const userData = {
+        id: userId,
+        email: response.email,
+        name: response.email.split('@')[0], // Use part before @ as display name
         avatar: "/abstract-user-representation.png",
       };
 
-      login(userData);
-      setLoading(false);
+      // Login with user data, accessToken, and refreshToken
+      login(userData, response.accessToken, response.refreshToken);
+
       navigate("/");
-    }, 1000);
+    } catch (error) {
+      console.error('Login error:', error);
+      setError(error.message || 'Đăng nhập thất bại. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden login-background flex flex-col">
+    <div className="relative overflow-hidden login-background flex flex-col">
       {/* Animated Background */}
       <div className="absolute inset-0">
         {/* Grid pattern */}
@@ -53,9 +76,9 @@ const Login = () => {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 flex-1 flex items-center justify-center p-4 py-8">
+      <div className="relative z-10 flex-1 flex items-center justify-center">
         {/* Login Card */}
-        <div className="login-card w-full max-w-md p-6 sm:p-8 mx-auto">
+        <div className="login-card mx-auto">
           <div className="relative">
             {/* Header */}
             <div className="text-center mb-8">
@@ -89,9 +112,10 @@ const Login = () => {
                   placeholder="Email"
                   className="form-input"
                   value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value });
+                    if (error) setError("");
+                  }}
                   required
                 />
                 <div className="absolute right-4 top-4">
@@ -117,15 +141,17 @@ const Login = () => {
                   placeholder="Mật khẩu"
                   className="form-input"
                   value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setFormData({ ...formData, password: e.target.value });
+                    if (error) setError("");
+                  }}
                   required
                 />
                 <button
                   type="button"
                   className="absolute right-4 top-4 text-slate-400 hover:text-cyan-400 transition-colors"
                   onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
                 >
                   {showPassword ? (
                     <svg
@@ -199,10 +225,18 @@ const Login = () => {
                 <button
                   type="button"
                   className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium"
+                  tabIndex={-1}
                 >
                   Quên mật khẩu?
                 </button>
               </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="text-center">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -264,9 +298,9 @@ const Login = () => {
       </div>
 
       {/* Footer */}
-      <footer className="relative z-10 py-6 text-center">
-        <div className="max-w-md mx-auto px-4">
-          <div className="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-6 text-slate-200 text-sm">
+      <footer className="relative z-10 text-center">
+        <div className="max-w-md mx-auto">
+          <div className="flex flex-col sm:flex-row items-center justify-center text-slate-200 text-xs sm:text-sm">
             <span>© 2024 SocialBondNet</span>
             <div className="flex items-center space-x-4">
               <a href="#" className="hover:text-cyan-400 transition-colors">

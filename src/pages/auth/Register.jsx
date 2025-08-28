@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
+import { authService } from "../../services/authService";
 import "./Login.css";
 
 const Register = () => {
@@ -18,7 +18,6 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const { login } = useAuth();
   const navigate = useNavigate();
 
   const validateForm = () => {
@@ -43,25 +42,30 @@ const Register = () => {
     e.preventDefault();
     if (!validateForm()) return;
     setLoading(true);
+    setErrors({});
 
-    // Simulate sending OTP email
-    setTimeout(() => {
+    try {
+      // Send OTP to email
+      await authService.sendOTP(formData.email, 'EMAIL_VERIFICATION');
+      
+      // Prepare user data for OTP verification
       const userData = {
-        id: Date.now(),
-        name: formData.fullName,
+        fullName: formData.fullName,
         email: formData.email,
-        DOB: `${formData.DOB.year}-${formData.DOB.month.padStart(
-          2,
-          "0"
-        )}-${formData.DOB.day.padStart(2, "0")}`,
-        gender: formData.gender,
-        avatar: "/abstract-user-representation.png",
+        dateOfBirth: `${formData.DOB.year}-${formData.DOB.month.padStart(2, "0")}-${formData.DOB.day.padStart(2, "0")}T00:00:00`,
+        gender: formData.gender === 'male' ? 'Nam' : formData.gender === 'female' ? 'Nữ' : 'Khác',
+        password: formData.password,
+        confirmPassword: formData.confirmPassword
       };
 
-      setLoading(false);
       // Navigate to OTP verification with user data
-      navigate("/otp-verification", { state: { userData } });
-    }, 1500);
+      navigate("/otp-verification", { state: { userData, isRegistration: true } });
+    } catch (error) {
+      console.error('Send OTP error:', error);
+      setErrors({ submit: error.message || 'Không thể gửi mã OTP. Vui lòng thử lại.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -177,8 +181,8 @@ const Register = () => {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 flex-1 flex items-center justify-center p-4 py-8">
-        <div className="login-card w-full max-w-md p-6 sm:p-8 mx-auto">
+      <div className="relative z-10 flex-1 flex items-center justify-center">
+        <div className="login-card mx-auto">
           <div className="relative">
             {/* Header */}
             <div className="text-center mb-8">
@@ -350,6 +354,7 @@ const Register = () => {
                   type="button"
                   className="absolute right-4 top-4 text-slate-400 hover:text-cyan-400 transition-colors"
                   onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
                 >
                   <EyeIcon show={showPassword} />
                 </button>
@@ -376,6 +381,7 @@ const Register = () => {
                   type="button"
                   className="absolute right-4 top-4 text-slate-400 hover:text-cyan-400 transition-colors"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  tabIndex={-1}
                 >
                   <EyeIcon show={showConfirmPassword} />
                 </button>
@@ -385,6 +391,13 @@ const Register = () => {
                   </p>
                 )}
               </div>
+
+              {/* Submit Error */}
+              {errors.submit && (
+                <div className="text-center">
+                  <p className="text-red-400 text-sm">{errors.submit}</p>
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -397,7 +410,7 @@ const Register = () => {
                   </div>
                 )}
                 <span className={loading ? "opacity-0" : "opacity-100"}>
-                  Tạo tài khoản
+                  {loading ? 'Đang gửi mã...' : 'Tạo tài khoản'}
                 </span>
               </button>
             </form>
@@ -445,9 +458,9 @@ const Register = () => {
       </div>
 
       {/* Footer */}
-      <footer className="relative z-10 py-6 text-center">
-        <div className="max-w-md mx-auto px-4">
-          <div className="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-6 text-slate-200 text-sm">
+      <footer className="relative z-10 text-center">
+        <div className="max-w-md mx-auto">
+          <div className="flex flex-col sm:flex-row items-center justify-center text-slate-200 text-sm">
             <span>© 2024 SocialBondNet</span>
             <div className="flex items-center space-x-4">
               <a href="#" className="hover:text-cyan-400 transition-colors">

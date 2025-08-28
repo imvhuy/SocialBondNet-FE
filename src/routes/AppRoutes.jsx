@@ -56,7 +56,7 @@ const AppRoutes = () => {
       >
         <Route index element={<Home />} />
         <Route path="profile" element={<Profile />} />
-        <Route path="profile/:username" element={<Profile />} />
+        <Route path="u/:username" element={<Profile />} />
         <Route path="messages" element={<Messages />} />
         <Route path="messages/:conversationId" element={<Messages />} />
         <Route path="search" element={<Search />} />

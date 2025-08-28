@@ -14,4 +14,5 @@ export { default as NewsFeed } from './posts/NewsFeed'
 export { default as SearchBar } from './ui/SearchBar'
 export { default as NotificationDropdown } from './ui/NotificationDropdown'
 export { default as UserMenu } from './ui/UserMenu'
+export { default as SuccessModal } from './ui/SuccessModal'
 

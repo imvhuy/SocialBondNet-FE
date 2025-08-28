@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { authService } from '../services/authService'
 
 const AuthContext = createContext()
 
@@ -15,19 +16,41 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Simulate loading user data on app start
+  // Check authentication on app start and listen for logout events
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // TODO: Check token from localStorage/sessionStorage
-        // TODO: Validate token with backend
+        const token = localStorage.getItem('token')
+        const refreshToken = localStorage.getItem('refreshToken')
         const savedUser = localStorage.getItem('user')
-        if (savedUser) {
-          setUser(JSON.parse(savedUser))
-          setIsAuthenticated(true)
+
+        if (token && refreshToken && savedUser) {
+          // Try to validate token with backend
+          try {
+            const currentUser = await authService.getCurrentUser()
+            setUser(currentUser)
+            setIsAuthenticated(true)
+          } catch (error) {
+            console.warn('Token validation failed:', error.message)
+            // If validation fails, try refresh token
+            try {
+              await authService.refreshToken()
+              const currentUser = await authService.getCurrentUser()
+              setUser(currentUser)
+              setIsAuthenticated(true)
+            } catch (refreshError) {
+              console.warn('Token refresh failed:', refreshError.message)
+              // Clear invalid auth data
+              logout()
+            }
+          }
+        } else {
+          // Missing auth data
+          logout()
         }
       } catch (error) {
         console.error('Auth check failed:', error)
+        logout()
       } finally {
         setLoading(false)
       }
@@ -36,19 +59,46 @@ export const AuthProvider = ({ children }) => {
     checkAuth()
   }, [])
 
-  const login = (userData, token) => {
+  // Listen for logout events from apiClient interceptor
+  useEffect(() => {
+    const handleAuthLogout = (event) => {
+      console.log('Logout event received:', event.detail?.reason)
+      logout()
+    }
+
+    window.addEventListener('auth:logout', handleAuthLogout)
+
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout)
+    }
+  }, [])
+
+  const login = (userData, accessToken, refreshToken) => {
+    // Extract username from email if not provided
+    const userWithUsername = {
+      ...userData,
+      username: userData.username || userData.email?.split('@')[0] || 'user'
+    };
+
     setIsAuthenticated(true)
-    setUser(userData)
-    // TODO: Store token securely
-    localStorage.setItem('user', JSON.stringify(userData))
-    localStorage.setItem('token', token)
+    setUser(userWithUsername)
+
+    // Store all auth data securely
+    localStorage.setItem('user', JSON.stringify(userWithUsername))
+    localStorage.setItem('token', accessToken)
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken)
+    }
   }
 
   const logout = () => {
     setIsAuthenticated(false)
     setUser(null)
+
+    // Clear all auth data
     localStorage.removeItem('user')
     localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
   }
 
   const updateUser = (newUserData) => {

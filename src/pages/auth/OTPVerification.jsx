@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { authService } from "../../services/authService";
+import SuccessModal from "../../components/ui/SuccessModal";
 import "./Login.css";
 
 const OTPVerification = () => {
@@ -11,6 +13,8 @@ const OTPVerification = () => {
   const [error, setError] = useState("");
   const [resendCooldown, setResendCooldown] = useState(60);
   const [canResend, setCanResend] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [loginData, setLoginData] = useState(null);
   const inputRefs = useRef([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -18,12 +22,13 @@ const OTPVerification = () => {
 
   // Get user data from registration
   const userData = location.state?.userData;
+  const isRegistration = location.state?.isRegistration || false;
   const userEmail = userData?.email || "user@example.com";
 
   useEffect(() => {
     // Redirect if no user data
     if (!userData) {
-      navigate("/register");
+      navigate(isRegistration ? "/register" : "/login");
       return;
     }
 
@@ -40,7 +45,7 @@ const OTPVerification = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [userData, navigate]);
+  }, [userData, navigate, isRegistration]);
 
   const handleOtpChange = (index, value) => {
     if (value.length > 1) return;
@@ -90,23 +95,49 @@ const OTPVerification = () => {
     setError("");
 
     try {
-      // Simulate API call for OTP verification
-      await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          // For demo, accept "123456" as valid OTP
-          if (otpCode === "123456") {
-            resolve();
-          } else {
-            reject(new Error("Mã OTP không chính xác"));
-          }
-        }, 1500);
-      });
+      if (isRegistration) {
+        // For registration - call sign-up API
+        const signUpData = {
+          ...userData,
+          otpCode: otpCode
+        };
 
-      // Login user after successful verification
-      login(userData);
-      navigate("/");
+        const response = await authService.signUp(signUpData);
+
+        // Decode JWT to get user ID (same as Login.jsx)
+        let userId = null;
+        try {
+          const tokenPayload = JSON.parse(atob(response.accessToken.split('.')[1]));
+          userId = tokenPayload.userId;
+        } catch (e) {
+          console.warn('Could not decode token for user ID:', e);
+        }
+
+        // Create user data from response (same structure as Login.jsx)
+        const loginData = {
+          id: userId,
+          email: response.email || userData.email,
+          name: response.email ? response.email.split('@')[0] : userData.fullName,
+          avatar: response.user?.avatar || "/abstract-user-representation.png"
+        };
+
+        // Store complete login data for later use (including tokens)
+        setLoginData({
+          userData: loginData,
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken
+        });
+
+        // Show success modal first
+        setShowSuccessModal(true);
+      } else {
+        // For other OTP verification (e.g., password reset)
+        // This would be implemented based on your needs
+        setError("Chức năng này chưa được hỗ trợ");
+      }
     } catch (err) {
-      setError(err.message);
+      console.error('OTP verification error:', err);
+      setError(err.message || "Mã OTP không chính xác");
     } finally {
       setLoading(false);
     }
@@ -119,10 +150,17 @@ const OTPVerification = () => {
     setResendCooldown(60);
     setError("");
 
-    // Simulate resend API call
-    setTimeout(() => {
+    try {
+      // Resend OTP API call
+      await authService.sendOTP(userData.email, 'EMAIL_VERIFICATION');
       alert("Mã OTP mới đã được gửi đến email của bạn!");
-    }, 500);
+    } catch (error) {
+      console.error('Resend OTP error:', error);
+      setError(error.message || "Không thể gửi lại mã OTP. Vui lòng thử lại.");
+      setCanResend(true);
+      setResendCooldown(0);
+      return;
+    }
 
     // Restart countdown
     const timer = setInterval(() => {
@@ -161,8 +199,8 @@ const OTPVerification = () => {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 flex-1 flex items-center justify-center p-4 py-8">
-        <div className="login-card w-full max-w-md p-6 sm:p-8 mx-auto">
+      <div className="relative z-10 flex-1 flex items-center justify-center">
+        <div className="login-card mx-auto">
           <div className="relative">
             {/* Header */}
             <div className="text-center mb-8">
@@ -175,7 +213,7 @@ const OTPVerification = () => {
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                     <path
+                      <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
@@ -273,10 +311,10 @@ const OTPVerification = () => {
 
                 <button
                   type="button"
-                  onClick={() => navigate("/register")}
+                  onClick={() => navigate(isRegistration ? "/register" : "/login")}
                   className="w-full py-3 px-4 text-slate-200 hover:text-white transition-colors text-sm"
                 >
-                  Quay lại đăng ký
+                  {isRegistration ? "Quay lại đăng ký" : "Quay lại đăng nhập"}
                 </button>
               </div>
             </form>
@@ -285,9 +323,9 @@ const OTPVerification = () => {
       </div>
 
       {/* Footer */}
-      <footer className="relative z-10 py-6 text-center">
-        <div className="max-w-md mx-auto px-4">
-          <div className="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-6 text-slate-200 text-sm">
+      <footer className="relative z-10 text-center">
+        <div className="max-w-md mx-auto">
+          <div className="flex flex-col sm:flex-row items-center justify-center text-slate-200 text-sm">
             <span>© 2024 SocialBondNet</span>
             <div className="flex items-center space-x-4">
               <a href="#" className="hover:text-cyan-400 transition-colors">
@@ -305,6 +343,22 @@ const OTPVerification = () => {
       </footer>
 
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-900/50 to-transparent pointer-events-none"></div>
+
+      {/* Success Modal */}
+      <SuccessModal
+        isOpen={showSuccessModal}
+        title="Đăng ký thành công!"
+        message="Chào mừng bạn đến với SocialBondNet! Tài khoản của bạn đã được tạo thành công và bạn có thể bắt đầu khám phá cộng đồng của chúng tôi ngay bây giờ."
+        onClose={() => setShowSuccessModal(false)}
+        onConfirm={() => {
+          setShowSuccessModal(false);
+          // Now perform the login and navigate (same as Login.jsx)
+          if (loginData) {
+            login(loginData.userData, loginData.accessToken, loginData.refreshToken);
+            navigate("/");
+          }
+        }}
+      />
     </div>
   );
 };
