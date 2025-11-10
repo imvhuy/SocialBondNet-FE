@@ -5,9 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8762
 // Create axios instance
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // Do not force Content-Type globally; let axios infer based on payload
   timeout: 0, // Remove timeout limit for debugging
 })
 
@@ -19,13 +17,19 @@ apiClient.interceptors.request.use(
     const token = localStorage.getItem('token')
     const user = JSON.parse(localStorage.getItem('user') || '{}')
 
-    if (token) {
+    // Attach Authorization header unless it's already explicitly set
+    if (token && !config.headers?.Authorization) {
       config.headers.Authorization = `Bearer ${token}`
     }
 
     // Add X-User-Id header if user ID is available
     if (user.id) {
       config.headers['X-User-Id'] = user.id
+    }
+
+    // Some endpoints like refresh might not require/shouldn't use access token
+    if (config.url?.includes('/auth/refresh')) {
+      delete config.headers.Authorization
     }
 
     return config
